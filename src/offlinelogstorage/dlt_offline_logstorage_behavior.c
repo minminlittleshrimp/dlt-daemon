@@ -379,8 +379,7 @@ int dlt_logstorage_storage_dir_info(DltLogStorageUserConfig *file_config,
             suffix = strdup(".dlt");
         }
 
-        int len = 0;
-        len = strlen(file_name);
+        int len = strlen(file_name);
 
         dlt_vlog(LOG_DEBUG,
                  "%s: Scanned file name=[%s], filter file name=[%s]\n",
@@ -390,7 +389,7 @@ int dlt_logstorage_storage_dir_info(DltLogStorageUserConfig *file_config,
                 /* <filename>.dlt or <filename>_<tmsp>.dlt */
                 if ((files[i]->d_name[len] == suffix[0]) ||
                     (file_config->logfile_timestamp &&
-                     (files[i]->d_name[len] == file_config->logfile_delimiter))) {
+                    (files[i]->d_name[len] == file_config->logfile_delimiter))) {
                     current_idx = 1;
                 } else {
                     continue;
@@ -577,7 +576,7 @@ int dlt_logstorage_open_log_file(DltLogStorageFilterConfig *config,
         strcat(absolute_file_path, storage_path);
         strcat(absolute_file_path, file_name);
         config->working_file_name = strdup(file_name);
-        dlt_logstorage_open_log_output_file(config, absolute_file_path, "a+");
+        dlt_logstorage_open_log_output_file(config, absolute_file_path, "a");
 
         /* Add file to file list */
         *tmp = malloc(sizeof(DltLogStorageFileList));
@@ -620,7 +619,7 @@ int dlt_logstorage_open_log_file(DltLogStorageFilterConfig *config,
         if ((ret == 0) &&
             ((is_sync && (s.st_size < (int)config->file_size)) ||
              (!is_sync && (s.st_size + msg_size <= (int)config->file_size)))) {
-            dlt_logstorage_open_log_output_file(config, absolute_file_path, "a+");
+            dlt_logstorage_open_log_output_file(config, absolute_file_path, "a");
             config->current_write_file_offset = s.st_size;
         }
         else {
