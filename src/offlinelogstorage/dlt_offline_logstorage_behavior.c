@@ -374,76 +374,76 @@ int dlt_logstorage_storage_dir_info(DltLogStorageUserConfig *file_config,
     for (i = 0; i < cnt; i++) {
         if (config->gzip_compression) {
             suffix = strdup(".dlt.gz");
-        }
-        else {
+        } else {
             suffix = strdup(".dlt");
         }
 
-        int len = strlen(file_name);
+        int len = strlen(config->file_name);
+        int fname_len = strlen(files[i]->d_name);
+        int suffix_len = strlen(suffix);
 
         dlt_vlog(LOG_DEBUG,
                  "%s: Scanned file name=[%s], filter file name=[%s]\n",
                   __func__, files[i]->d_name, file_name);
-        if (strncmp(files[i]->d_name, file_name, len) == 0) {
-            if (config->num_files == 1 && file_config->logfile_optional_counter) {
-                /* <filename>.dlt or <filename>_<tmsp>.dlt */
-                if ((files[i]->d_name[len] == suffix[0]) ||
-                    (file_config->logfile_timestamp &&
-                    (files[i]->d_name[len] == file_config->logfile_delimiter))) {
-                    current_idx = 1;
-                } else {
-                    continue;
-                }
+        if ((strncmp(files[i]->d_name, config->file_name, len) == 0) &&
+            (config->num_files == 1) &&
+            (files[i]->d_name[len] == file_config->logfile_delimiter) &&
+            (file_config->logfile_optional_counter)) {
+            /* <filename>.dlt or <filename>_<tmsp>.dlt */
+            if ((files[i]->d_name[len] == suffix[0]) ||
+                (file_config->logfile_timestamp)) {
+                current_idx = 1;
             } else {
-                /* <filename>_idx.dlt or <filename>_idx_<tmsp>.dlt */
-                if (files[i]->d_name[len] == file_config->logfile_delimiter) {
-                    current_idx = dlt_logstorage_get_idx_of_log_file(file_config, config,
-                                                                     files[i]->d_name);
-                } else {
-                    continue;
-                }
+                continue;
             }
+        } else {
+            /* <filename>_idx.dlt or <filename>_idx_<tmsp>.dlt */
+            if ((fname_len > suffix_len) &&
+                (strncmp(&files[i]->d_name[fname_len - suffix_len], suffix, suffix_len) == 0)) {
+                current_idx = dlt_logstorage_get_idx_of_log_file(file_config, config, files[i]->d_name);
+            } else {
+                continue;
+            }
+        }
 
-            DltLogStorageFileList **tmp = NULL;
+        DltLogStorageFileList **tmp = NULL;
+
+        if (config->records == NULL) {
+            config->records = malloc(sizeof(DltLogStorageFileList));
 
             if (config->records == NULL) {
-                config->records = malloc(sizeof(DltLogStorageFileList));
-
-                if (config->records == NULL) {
-                    ret = -1;
-                    dlt_log(LOG_ERR, "Memory allocation failed\n");
-                    break;
-                }
-
-                tmp = &config->records;
-            }
-            else {
-                tmp = &config->records;
-
-                while (*(tmp) != NULL)
-                    tmp = &(*tmp)->next;
-
-                *tmp = malloc(sizeof(DltLogStorageFileList));
-
-                if (*tmp == NULL) {
-                    ret = -1;
-                    dlt_log(LOG_ERR, "Memory allocation failed\n");
-                    break;
-                }
+                ret = -1;
+                dlt_log(LOG_ERR, "Memory allocation failed\n");
+                break;
             }
 
-            char tmpfile[DLT_OFFLINE_LOGSTORAGE_MAX_LOG_FILE_LEN + 1] = { '\0' };
-            if (dir != NULL) {
-                /* Append directory path */
-                strcat(tmpfile, dir);
-                strcat(tmpfile, "/");
+            tmp = &config->records;
+        } else {
+            tmp = &config->records;
+
+            while (*(tmp) != NULL)
+                tmp = &(*tmp)->next;
+
+            *tmp = malloc(sizeof(DltLogStorageFileList));
+
+            if (*tmp == NULL) {
+                ret = -1;
+                dlt_log(LOG_ERR, "Memory allocation failed\n");
+                break;
             }
-            strcat(tmpfile, files[i]->d_name);
-            (*tmp)->name = strdup(tmpfile);
-            (*tmp)->idx = current_idx;
-            (*tmp)->next = NULL;
-            check++;
         }
+
+        char tmpfile[DLT_OFFLINE_LOGSTORAGE_MAX_LOG_FILE_LEN + 1] = { '\0' };
+        if (dir != NULL) {
+            /* Append directory path */
+            strcat(tmpfile, dir);
+            strcat(tmpfile, "/");
+        }
+        strcat(tmpfile, files[i]->d_name);
+        (*tmp)->name = strdup(tmpfile);
+        (*tmp)->idx = current_idx;
+        (*tmp)->next = NULL;
+        check++;
     }
 
     dlt_vlog(LOG_DEBUG, "%s: After dir scan: [%d] files of [%s]\n", __func__,
