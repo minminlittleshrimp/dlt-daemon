@@ -663,8 +663,17 @@ int dlt_control_deinit(void)
         close(g_client.receiver.fd);
         g_client.receiver.fd = -1;
     }
-    /* Waiting for thread to complete */
-    pthread_join(daemon_connect_thread, NULL);
+
+        /* Stopping the listener thread */
+    if (pthread_cancel(daemon_connect_thread)) {
+        pr_error("Unable to cancel the thread with ERRNO=%s\n", strerror(errno));
+    }
+    else {
+        if (pthread_join(daemon_connect_thread, NULL)) {
+            pr_error("Unable to join the thread with ERRNO=%s\n", strerror(errno));
+        }
+    }
+
     /* Closing the socket */
     return dlt_client_cleanup(&g_client, get_verbosity());
 }
@@ -839,8 +848,12 @@ DltReturnValue dlt_json_filter_load(DltFilter *filter, const char *filename, int
 
         char app_id[DLT_ID_SIZE];
         char context_id[DLT_ID_SIZE];
+
+        #pragma GCC diagnostic push
+        #pragma GCC diagnostic ignored "-Wstringop-truncation"
         strncpy(app_id, s_app_id, DLT_ID_SIZE);
         strncpy(context_id, s_context_id, DLT_ID_SIZE);
+        #pragma GCC diagnostic pop
 
         dlt_filter_add(filter, app_id, context_id, log_level, payload_min, payload_max, verbose);
 

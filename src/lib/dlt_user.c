@@ -108,7 +108,8 @@ static char dlt_user_dir[DLT_PATH_MAX];
 static char dlt_daemon_fifo[DLT_PATH_MAX];
 #endif
 
-static sem_t dlt_mutex;
+static pthread_mutex_t dlt_mutex;
+static pthread_mutexattr_t dlt_mutex_attr;
 static pthread_t dlt_housekeeperthread_handle;
 
 /* Sync housekeeper thread start */
@@ -719,7 +720,9 @@ DltReturnValue dlt_init_common(void)
     uint32_t header_size = 0;
 
     /* Binary semaphore for threads */
-    if (sem_init(&dlt_mutex, 0, 1) == -1) {
+    if ((pthread_attr_init(&dlt_mutex_attr) != 0) ||
+        (pthread_mutexattr_settype(&dlt_mutex_attr, PTHREAD_MUTEX_ERRORCHECK) != 0) ||
+        (pthread_mutex_init(&dlt_mutex, &dlt_mutex_attr) != 0)) {
         dlt_user_init_state = INIT_UNITIALIZED;
         return DLT_RETURN_ERROR;
     }
@@ -1090,6 +1093,8 @@ DltReturnValue dlt_free(void)
                             break;
                     }
                     if (bytes_read >= 0) {
+                        dlt_vlog(LOG_DEBUG, "%s - %d: %d bytes read from resend buffer\n",
+                                __func__, __LINE__, (int)bytes_read);
                         if (!bytes_read)
                             break;
                         dlt_vlog(LOG_NOTICE, "[%s] data is still readable... [%zd] bytes read\n",
@@ -1182,7 +1187,7 @@ DltReturnValue dlt_free(void)
 
     pthread_cond_destroy(&mq_init_condition);
 #endif /* DLT_NETWORK_TRACE_ENABLE */
-    sem_destroy(&dlt_mutex);
+    pthread_mutex_destroy(&dlt_mutex);
 
     /* allow the user app to do dlt_init() again. */
     /* The flag is unset only to keep almost the same behaviour as before, on EntryNav */
@@ -4038,10 +4043,14 @@ DltReturnValue dlt_user_log_send_log(DltContextData *log, int mtype)
         else {
             /* Get file size */
             struct stat st;
-            fstat(dlt_user.dlt_log_handle, &st);
+            if(fstat(dlt_user.dlt_log_handle, &st) != 0) {
+                dlt_vlog(LOG_WARNING,
+                     "%s: Cannot get file information (errno=%d)\n", __func__, errno);
+                return DLT_RETURN_ERROR;
+            }
+
             dlt_vlog(LOG_DEBUG, "%s: Current file size=[%ld]\n", __func__,
                      st.st_size);
-
             /* Check filesize */
             /* Return error if the file size has reached to maximum */
             unsigned int msg_size = st.st_size + (unsigned int) msg.headersize +
@@ -4759,7 +4768,8 @@ DltReturnValue dlt_user_log_check_user_message(void)
                 {
                     dlt_log(LOG_WARNING, "Invalid user message type received!\n");
                     /* Ignore result */
-                    dlt_receiver_remove(receiver, sizeof(DltUserHeader));
+                    if (dlt_receiver_remove(receiver, sizeof(DltUserHeader)) == -1)
+                        dlt_log(LOG_WARNING, "Can't remove bytes from receiver\n");
                     /* In next invocation of while loop, a resync will be triggered if additional data was received */
                 }
                 break;
